@@ -13,7 +13,7 @@ from BaseAxonHillockModel import BaseAxonHillockModel
 class HodgkinHuxley(BaseAxonHillockModel):
     updates = ['spike_state', 'V']
     accesses = ['I']
-    params = ['n','m','h']
+    params = ['initn','initm','inith']
     internals = OrderedDict([('internalV',-65.)])
 
     def __init__(self, params_dict, access_buffers, dt,
@@ -23,13 +23,22 @@ class HodgkinHuxley(BaseAxonHillockModel):
         else:
             self.compile_options = []
 
-        self.num_comps = params_dict['n'].size
+        for a in self.params:
+            #print(a)
+            #print(params_dict[a])
+            params_dict[a] = params_dict[a].astype(np.float32)
+        for a in self.internals.keys():
+            #print(a)
+            #print(self.internals[a])
+            self.internals[a] = np.float32(self.internals[a])
+        self.num_comps = params_dict['initn'].size
         self.params_dict = params_dict
         self.access_buffers = access_buffers
 
         self.debug = debug
         self.LPU_id = LPU_id
-        self.dtype = params_dict['n'].dtype
+
+        self.dtype = params_dict['initn'].dtype
 
         self.dt = np.double(dt)
         self.ddt = np.double(1e-6)
@@ -48,6 +57,7 @@ class HodgkinHuxley(BaseAxonHillockModel):
         dtypes.update({k: self.params_dict[k].dtype for k in self.params})
         dtypes.update({k: self.internal_states[k].dtype for k in self.internals})
         dtypes.update({k: self.dtype if not k == 'spike_state' else np.int32 for k in self.updates})
+        print(dtypes)
         self.update_func = self.get_update_func(dtypes)
 
     def pre_run(self, update_pointers):
@@ -82,9 +92,9 @@ __global__ void update(
     %(dt)s dt,
     int nsteps,
     %(I)s* g_I,
-    %(n)s* g_n,
-    %(m)s* g_m,
-    %(h)s* g_h,
+    %(initn)s* g_n,
+    %(initm)s* g_m,
+    %(inith)s* g_h,
     %(internalV)s* g_internalV,
     %(spike_state)s* g_spike_state,
     %(V)s* g_V)
@@ -97,41 +107,41 @@ __global__ void update(
     %(V)s V, Vprev1, Vprev2, dV;
     %(I)s I;
     %(spike_state)s spike;
-    %(n)s n, dn;
-    %(m)s m, dm;
-    %(h)s h, dh;
-    %(n)s a;
+    %(initn)s initn, dn;
+    %(initm)s initm, dm;
+    %(inith)s inith, dh;
+    %(initn)s a;
 
     for(int i = tid; i < num_comps; i += total_threads)
     {
         spike = 0;
         V = g_internalV[i];
         I = g_I[i];
-        n = g_n[i];
-        m = g_m[i];
-        h = g_h[i];
+        initn = g_n[i];
+        initm = g_m[i];
+        inith = g_h[i];
 
         for (int j = 0; j < nsteps; ++j)
         {
             a = exp(-(V+55)/10)-1;
             if (abs(a) <= 1e-7)
-                dn = (1.-n) * 0.1 - n * (0.125*EXP(-(V+65.)/80.));
+                dn = (1.-initn) * 0.1 - initn * (0.125*EXP(-(V+65.)/80.));
             else
-                dn = (1.-n) * (-0.01*(V+55.)/a) - n * (0.125*EXP(-(V+65)/80));
+                dn = (1.-initn) * (-0.01*(V+55.)/a) - initn * (0.125*EXP(-(V+65)/80));
 
             a = exp(-(V+40.)/10.)-1.;
             if (abs(a) <= 1e-7)
-                dm = (1.-m) - m*(4*EXP(-(V+65)/18));
+                dm = (1.-initm) -initm*(4*EXP(-(V+65)/18));
             else
-                dm = (1.-m) * (-0.1*(V+40.)/a) - m * (4.*EXP(-(V+65.)/18.));
+                dm = (1.-initm) * (-0.1*(V+40.)/a) - initm * (4.*EXP(-(V+65.)/18.));
 
-            dh = (1.-h) * (0.07*EXP(-(V+65.)/20.)) - h / (EXP(-(V+35.)/10.)+1.);
+            dh = (1.-inith) * (0.07*EXP(-(V+65.)/20.)) - inith / (EXP(-(V+35.)/10.)+1.);
 
-            dV = I - 120.*POW(m,3)*h*(V-50.) - 36. * POW(n,4) * (V+77.) - 0.3 * (V+54.387);
+            dV = I - 120.*POW(initm,3)*inith*(V-50.) - 36. * POW(initn,4) * (V+77.) - 0.3 * (V+54.387);
 
-            n += ddt * dn;
-            m += ddt * dm;
-            h += ddt * dh;
+            initn += ddt * dn;
+            initm += ddt * dm;
+            inith += ddt * dh;
             V += ddt * dV;
 
             spike += (Vprev2<=Vprev1) && (Vprev1 >= V) && (Vprev1 > -30);
@@ -140,9 +150,9 @@ __global__ void update(
             Vprev1 = V;
         }
 
-        g_n[i] = n;
-        g_m[i] = m;
-        g_h[i] = h;
+        g_n[i] = initn;
+        g_m[i] = initm;
+        g_h[i] = inith;
         g_V[i] = V;
         g_internalV[i] = V;
         g_spike_state[i] = (spike > 0);
@@ -153,14 +163,14 @@ __global__ void update(
 
     def get_update_func(self, dtypes):
         type_dict = {k: dtype_to_ctype(dtypes[k]) for k in dtypes}
-        type_dict.update({'fletter': 'f' if type_dict['n'] == 'float' else ''})
+        type_dict.update({'fletter': 'f' if type_dict['initn'] == 'float' else ''})
         mod = SourceModule(self.get_update_template() % type_dict,
                            options=self.compile_options)
         func = mod.get_function("update")
         func.prepare('i'+np.dtype(dtypes['dt']).char+'i'+'P'*(len(type_dict)-2))
-        func.block = (128,1,1)
+        func.block = (256,1,1)
         func.grid = (min(6 * cuda.Context.get_device().MULTIPROCESSOR_COUNT,
-                         (self.num_comps-1) / 128 + 1), 1)
+                         (self.num_comps-1) / 256 + 1), 1)
         return func
 
 
@@ -208,12 +218,12 @@ if __name__ == '__main__':
 
     G = nx.MultiDiGraph()
 
-    G.add_node('neuron0', **{
+    G.add_node('neuron0', {
                'class': 'HodgkinHuxley',
                'name': 'HodgkinHuxley',
-               'n': 0.,
-               'm': 0.,
-               'h': 1.,
+               'initn': 0.,
+               'initm': 0.,
+               'inith': 1.,
                })
 
     comp_dict, conns = LPU.graph_to_dicts(G)
@@ -228,19 +238,3 @@ if __name__ == '__main__':
     man.spawn()
     man.start(steps=args.steps)
     man.wait()
-
-    # plot the result
-    import h5py
-    import matplotlib
-    matplotlib.use('PS')
-    import matplotlib.pyplot as plt
-
-    f = h5py.File('new_output.h5')
-    t = np.arange(0, args.steps)*dt
-
-    plt.figure()
-    plt.plot(t,f['V'].values()[0])
-    plt.xlabel('time, [s]')
-    plt.ylabel('Voltage, [mV]')
-    plt.title('Hodgkin-Huxley Neuron')
-    plt.savefig('hhn.png',dpi=300)

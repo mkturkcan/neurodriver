@@ -10,7 +10,7 @@ from pycuda.compiler import SourceModule
 # The following kernel assumes a maximum of one input connection
 # per neuron
 cuda_src = """
-__global__ void alpha_synapse(
+__global__ void linear_synapse(
     int num,
     %(type)s dt,
     int *spike,
@@ -35,7 +35,7 @@ __global__ void alpha_synapse(
     %(type)s old_a[3];
     %(type)s new_a[3];
     int pre;
-
+    int l;
     int col;
     for( int i=tid; i<num; i+=tot_threads ){
         // copy data from global memory to register
@@ -46,25 +46,19 @@ __global__ void alpha_synapse(
             old_a[0] = a0[i];
             old_a[1] = a1[i];
             old_a[2] = a2[i];
-            // update the alpha function
-            new_a[0] = fmax( 0., old_a[0] + dt*old_a[1] );
-            new_a[1] = old_a[1] + dt*old_a[2];
+            new_a[0] = fmax( 0., old_a[0] - dt*ad );
             col = current-delay[i];
             if(col < 0)
             {
                 col = buffer_length + col;
             }
             pre = col*ld + Pre[cumpre[i]];
-            if( spike[pre] )
-                new_a[1] += ar*ad*((float)spike[pre]);
-            new_a[2] = -( ar+ad )*old_a[1] - ar*ad*old_a[0];
-
+            if (spike[pre])
+                new_a[0] += ar * dt * spike[pre];
 
             // copy data from register to the global memory
             a0[i] = new_a[0];
-            a1[i] = new_a[1];
-            a2[i] = new_a[2];
-            cond[i] = new_a[0]*gmax;
+            cond[i] = fmax( 0., new_a[0]*gmax);
         }
         else{
             cond[i] = 0;
@@ -73,7 +67,7 @@ __global__ void alpha_synapse(
     return;
 }
 """
-class AlphaSynapse(BaseSynapseModel):
+class ALinearSynapse(BaseSynapseModel):
     accesses = ['spike_state']
 
     def __init__( self, params_dict, access_buffers, dt,
@@ -128,6 +122,6 @@ class AlphaSynapse(BaseSynapseModel):
         mod = SourceModule( \
                 cuda_src % {"type": dtype_to_ctype(dtype)},\
                             options=self.compile_options)
-        func = mod.get_function("alpha_synapse")
+        func = mod.get_function("linear_synapse")
         func.prepare('idPiiiPPPPPPPPPPP')
         return func

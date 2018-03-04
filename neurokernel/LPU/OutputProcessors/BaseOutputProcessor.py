@@ -21,19 +21,20 @@ class BaseOutputProcessor(object):
         self.src_inds = {}
         self._LPU_obj = None
         self._d_output = {}
-        
+
     @property
     def LPU_obj(self):
         return self._LPU_obj
 
     @LPU_obj.setter
     def LPU_obj(self, value):
+        #print(value)
         assert(isinstance(value, LPU))
         self._LPU_obj = value
         self.start_time = self._LPU_obj.time
         self.dt = self._LPU_obj.dt
         self.memory_manager = self._LPU_obj.memory_manager
-        
+
     def run_step(self):
         assert(self.LPU_obj)
         self.epoch += 1
@@ -45,13 +46,15 @@ class BaseOutputProcessor(object):
                                           gpudata=int(buff.gpudata)+\
                                           buff.current*buff.ld*\
                                           buff.dtype.itemsize)
-            
+
                 self.get_inds(src_mem, self._d_output[var],self.src_inds[var])
                 d['output'] = self._d_output[var].get()
             self.process_output()
 
     def _pre_run(self):
         assert(self.LPU_obj)
+        print(self.memory_manager.variables)
+        print(self.variables.keys())
         assert(all([var in self.memory_manager.variables
                     for var in self.variables.keys()]))
         for var, d in self.variables.items():
@@ -83,7 +86,7 @@ class BaseOutputProcessor(object):
     # Should be implemented by child class
     def pre_run(self):
         pass
-        
+
     # Should be implemented by child class
     def process_output(self):
         pass
@@ -100,7 +103,7 @@ class BaseOutputProcessor(object):
         assert src.dtype == dest.dtype
         inds_ctype = dtype_to_ctype(inds.dtype)
         data_ctype = dtype_to_ctype(src.dtype)
-        
+
         func = get_inds_kernel(inds_ctype, data_ctype)
         func(dest, int(src_shift), inds, src, range=slice(0, len(inds), 1) )
 

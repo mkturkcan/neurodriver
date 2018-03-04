@@ -18,7 +18,7 @@ class MemoryManager(object):
         self.variables = {}
         self.parameters = {}
         self.mapping = {}          #Mapping from [model_name->variable/parameter]->pos
-        
+
     def get_buffer(self, variable_name):
         return self.variables[variable_name]['buffer']
 
@@ -38,7 +38,7 @@ class MemoryManager(object):
                                        buff.current*buff.ld*\
                                        buff.dtype.itemsize)
             self._fill_zeros_kernel(dest_mem, garray.to_gpu(dest_inds))
-        elif model and not variable: 
+        elif model and not variable:
             for var, d in self.variables.iteritems():
                 if model in d['models']:
                     mind = d['models'].index(model)
@@ -63,18 +63,18 @@ class MemoryManager(object):
                                            buff.current*buff.ld*\
                                            buff.dtype.itemsize)
                 self._fill_zeros_kernel(dest_mem, garray.to_gpu(dest_inds))
-        
+
     def mutate_parameter(self, model_name, param, transform):
         pass
 
     def memory_alloc(self, variable_name, size, buffer_length=1,
-                     dtype=np.double, info={}, init=None):
+                     dtype=np.float32, info={}, init=None):
         assert(variable_name not in self.variables)
         self.variables[variable_name] = {'buffer': \
                             CircularArray(size, buffer_length, dtype, init)}
         self.variables[variable_name].update(info)
-            
-    def params_htod(self, model_name, param_dict, dtype=np.double):
+
+    def params_htod(self, model_name, param_dict, dtype=np.float32):
         if model_name in self.parameters:
             assert(not (set(self.parameters[model_name].keys()) &
                         set(param_dict.keys())))
@@ -101,7 +101,7 @@ class MemoryManager(object):
                 self.parameters[model_name]['conn_data'] = cd
             if not all([isinstance(i,numbers.Number) for i in v]): continue
             self.parameters[model_name][k] = garray.to_gpu(np.array(v, dtype))
-            
+
     def step(self):
         for d in self.variables.values():
             d['buffer'].step()
@@ -159,12 +159,12 @@ class CircularArray(object):
         Advance indices of current position in the buffer
     """
 
-    def __init__(self, size, buffer_length, dtype=np.double, init=None):
+    def __init__(self, size, buffer_length, dtype=np.float32, init=None):
 
         self.size = size
         if not isinstance(dtype, np.dtype): dtype = np.dtype(dtype)
         self.dtype = dtype
-        
+
         self.buffer_length = buffer_length
         if init:
             try:
@@ -180,8 +180,8 @@ class CircularArray(object):
         self.current = 0
         self.gpudata = self.parr.gpudata
         self.ld = self.parr.ld
-        
-        
+
+
     def step(self):
         """
         Advance indices of current graded potential and spiking neuron values.

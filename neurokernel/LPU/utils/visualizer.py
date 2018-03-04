@@ -27,7 +27,6 @@ import simpleio as sio
 class visualizer(object):
     """
     Visualize the output produced by LPU models.
-
     Examples
     --------
     >>> import neurokernel.LPU.utils.visualizer as vis
@@ -73,14 +72,12 @@ class visualizer(object):
                 sample_interval=1, start_time=0, dt=1e-4, transpose_axes = [1,0]):
         """
         Add data associated with a specific LPU to a visualization.
-
         To add a plot containing neurons from a particular LPU,
         the LPU needs to be added to the visualization using this
         function. Note that outputs from multiple neurons can
         be visualized using the same visualizer object. The IDs
         specified in the arguments passed to `add_plot()` are assumed to be
         indices into array stored in the HDF5 file.
-
         Parameters
         ----------
         data_file : str
@@ -90,12 +87,9 @@ class visualizer(object):
             Name of the LPU. Will be used as identifier to add plots.
             For input signals, the name of the LPU will be prepended
             with 'input_'. For example::
-
                 V.add_LPU('vision_in.h5', LPU='vision')
-
             will create the LPU identifier 'input_vision'.
             Therefore, adding a plot depicting this input can be done by::
-
                 V.add_plot({''type':'image',imlim':[-0.5,0.5]},LPU='input_vision)
         win : slice/list (Optional)
             Can be used to limit the visualization to a specific time window.
@@ -109,10 +103,10 @@ class visualizer(object):
             These arguments will only be used to set these attributes for
             input h5 files. For all other cases, these will be read from
             the h5 file
-        
+
         All arguments beyond LPU should be considered strictly keyword only
         """
-        
+
         if is_input:
             LPU = 'input_' + str(LPU)
             self._sample_intervals[LPU] = sample_interval
@@ -125,19 +119,19 @@ class visualizer(object):
                 self._uids[LPU][k] = f[k]['uids'].value
                 self._data[LPU][k] = np.transpose(f[k]['data'].value,
                                                   axes = transpose_axes)
-                
+
             self._config[LPU] = []
             if self._maxt:
                 self._maxt = min(self._maxt,
                                  (self._data[LPU][k].shape[1]-1)*self._dts[LPU])
             else:
-                self._maxt = (self._data[LPU][k].shape[1]-1)*self._dts[LPU]    
+                self._maxt = (self._data[LPU][k].shape[1]-1)*self._dts[LPU]
             f.close()
             return
 
         self._config[LPU] = []
         f = h5py.File(data_file)
-            
+
         self._sample_intervals[LPU] = f['metadata'].attrs['sample_interval']
         self._dts[LPU] = f['metadata'].attrs['dt'] * self._sample_intervals[LPU]
         self._start_times[LPU] = f['metadata'].attrs['start_time']
@@ -148,7 +142,7 @@ class visualizer(object):
             self._uids[LPU][k] = f[k]['uids'].value
             self._data[LPU][k] = np.transpose(f[k]['data'].value,
                                               axes = transpose_axes)
-        
+
         if win is not None:
             for k in self._data[LPU].keys():
                 self._data[LPU][k] = self._data[LPU][k][:,win]
@@ -159,18 +153,16 @@ class visualizer(object):
         else:
             self._maxt = (self._data[LPU][k].shape[1]-1)*self._dts[LPU]
         f.close()
-        
+
     def run(self, final_frame_name=None, dpi=300):
         """
         Starts the visualization process.
-
         If the property `out_filename` is set, the visualization is saved as a
         video to the disk; if not, the animation is displayed on screen.
         Please refer to documentation of `add_LPU`, `add_plot`
         and the properties of this class on how to configure the visualizer
         before calling this method. An example can be found in the class doc
         string.
-
         Parameters
         ----------
         final_frame_name : str, optional
@@ -179,7 +171,6 @@ class visualizer(object):
         dpi : int, default=300
             Resolution at which final frame is saved to disk if
             `final_frame_name` is specified.
-
         Notes
         -----
         If `update_interval` is set to 0 or None, it will be replaced by the
@@ -339,7 +330,7 @@ class visualizer(object):
                     config['handle'].set_ylabel('Neurons',
                                                 fontsize=self._fontsize-1, weight='bold')
                     config['handle'].set_xlabel('Time (s)',fontsize=self._fontsize-1, weight='bold')
-                    
+
                     config['handle'].set_xlim([0,self._data[LPU][var].shape[1]*dt])
                     config['handle'].axes.set_yticks([])
                     eps = np.finfo(float).eps
@@ -370,7 +361,7 @@ class visualizer(object):
                             config['norm'] = Normalize(vmin = np.min(self._data[LPU][var][config['ids'][0],:]),
                                                        vmax = np.max(self._data[LPU][var][config['ids'][0],:]),
                                                        clip = True)
-                    
+
                     node_dict = self._graph[LPU].node
                     latpositions = config['lat']
                     longpositions = config['long']
@@ -436,8 +427,8 @@ class visualizer(object):
                               frame_prefix=os.path.splitext(self.out_filename)[0]+'_')
             self.writer.frame_format = 'png'
             self.writer.grab_frame()
-        elif not self.final_frame_name:
-            self.f.show()
+        #elif not self.final_frame_name:
+            #self.f.show()
 
     def _update(self):
         t = self._t
@@ -545,16 +536,13 @@ class visualizer(object):
     def add_plot(self, config_dict, LPU):
         """
         Add a plot to the visualizer
-
         Parameters
         ----------
         config_dict: dict
             A dictionary specifying the plot attributes. The attribute
             names should be the keys.
-
             The following are the plot attributes that can be specfied using
             this dict.
-
             type - str  (Required)
                 This specifies the type of the plot. Has to be one of
                 ['waveform', 'raster', 'image','hsv','quiver', 'dome']
@@ -566,36 +554,28 @@ class visualizer(object):
                 Specifies the neuron uids from the associated LPU.
                 The list of uids consistent with uids in the h5file.
                 For example::
-
                     {'variable':'V','uids':[['1','2']]}
-
                 will plot neurons with uids 1 and 2.
                 Two lists of uids are needed if the plot is
                 of type 'hsv' or 'quiver'
                 For example::
-
                      {'variable':'V:,
                      'uids':[map(str,range(768)),map(str,range(768,1536)],'type':'HSV'}
-
                 can be used to generate a HSV plot where the hue channel is
                 controlled by the angle of the vector with the membrane
                 potentials of the component with uids '0' through '767' as the x component
                 and potentials of neurons with 'uids' '768' through '1535' as the y component.
                 The value will be the magnitude of the same vector.
-
                 This parameter must be specified for plots of type 'HSV' or 'quiver'
-        
+
                 If not specified, all components in the h5 file for which that variable was recorded
                 will be plotted
-        
+
             shape - list or tuple with two entries
                 This attribute specifies the dimensions for plots of type image,
                 hsv or quiver.
-
             title - str
                 Optional. Can be used to control the title of the plot.
-
-
             In addition to the above, any parameter supported by matlpotlib
             for the particular type of plot can be specified.
             For example - 'imlim','clim','xlim','ylim' etc.
@@ -608,11 +588,15 @@ class visualizer(object):
         var = config['variable']
         assert(LPU in self._uids and LPU in self._data)
         if 'uids' in config:
-            if not (isinstance(config['uids'], list) or 
+            if not (isinstance(config['uids'], list) or
                     isinstance(config['uids'], np.ndarray)):
                 config['uids'] = [config['uids']]
             config['ids'] = []
             for uids in config['uids']:
+                print(uids)
+                print(self._uids[LPU][var])
+                print([np.where(self._uids[LPU][var]==uid)
+                                      for uid in uids])
                 config['ids'].append([np.where(self._uids[LPU][var]==uid)[0][0]
                                       for uid in uids])
             self._config[LPU].append(config)
@@ -631,7 +615,7 @@ class visualizer(object):
                 for id in range(len(self._graph[LPU].node)):
                     if self._graph[LPU].node[str(id)]['name'] == name:
                         config['ids'][i].append(id-shift)
-            
+
             self._config[LPU].append(config)
             '''
         if not 'title' in config:
@@ -650,11 +634,9 @@ class visualizer(object):
         X-axis limits for all the raster and waveform plots. Can be superseded
         for individual plots by specifying xlim in the config_dict for that
         plot.
-
         See Also
         --------
         add_plot
-
         """
         return self._xlim
 
@@ -668,7 +650,6 @@ class visualizer(object):
         Get or set the limits of the y-axis for all the raster and waveform plots.
         Can be superseded for individual plots by specifying xlim in the config_dict
         for that plot.
-
         See Also
         --------
         add_plot
@@ -681,7 +662,7 @@ class visualizer(object):
 
     @property
     def FFMpeg(self): return self._FFMpeg
-    
+
     @FFMpeg.setter
     def FFMpeg(self, value):
         self._FFMpeg = value

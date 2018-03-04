@@ -23,7 +23,14 @@ class LeakyIAF(BaseAxonHillockModel):
             self.compile_options = ['--ptxas-options=-v']
         else:
             self.compile_options = []
-
+        for a in self.params:
+            #print(a)
+            #print(params_dict[a])
+            params_dict[a] = params_dict[a].astype(np.float32)
+        for a in self.internals.keys():
+            #print(a)
+            #print(self.internals[a])
+            self.internals[a] = np.float32(self.internals[a])
         self.num_comps = params_dict['resting_potential'].size
         self.params_dict = params_dict
         self.access_buffers = access_buffers
@@ -92,7 +99,6 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = gridDim.x * blockDim.x;
-
     %(V)s V;
     %(I)s I;
     %(spike_state)s spike;
@@ -102,7 +108,6 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
     %(capacitance)s capacitance;
     %(resistance)s resistance;
     %(dt)s bh;
-
     for(int i = tid; i < num_comps; i += total_threads)
     {
         V = g_internalV[i];
@@ -114,15 +119,22 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
         reset_potential = g_reset_potential[i];
 
         bh = exp%(fletter)s(-dt/(capacitance*resistance));
-        V = V*bh + (resistance*I+resting_potential)*(1.0 - bh);
-
+        //V = V*bh + (resistance*I+resting_potential)*(1.0 - bh);
+        V = V + resistance*I*dt - resistance * capacitance * (V - resting_potential) * dt;
+        //V = (1.0 - capacitance * dt) * V + capacitance * dt * resting_potential;
         spike = 0;
         if (V >= threshold)
         {
-            V = reset_potential;
-            spike = 1;
+            spike = (int) floor((V - reset_potential) / (threshold - reset_potential));
+            //for(int l=0;l<spike;l++)
+            V =  V - ((float)spike) * (threshold - reset_potential);
         }
-
+        //while (V >= threshold)
+        //{
+        //    V += reset_potential - threshold;
+        //    //V = reset_potential;
+        //    spike += 1;
+        //}
         g_V[i] = V;
         g_internalV[i] = V;
         g_spike_state[i] = spike;
@@ -188,7 +200,7 @@ if __name__ == '__main__':
 
     G = nx.MultiDiGraph()
 
-    G.add_node('neuron0', **{
+    G.add_node('neuron0', {
                'class': 'LeakyIAF',
                'name': 'LeakyIAF',
                'resting_potential': -70.0,
